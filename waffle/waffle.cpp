@@ -2,21 +2,27 @@
 #include <iostream>
 #include "array.hpp"
 
+
+
+template <typename T, template <typename> typename Op>
+T eval(const T &a, const T &b)
+{
+	return Op<T>()(a, b);
+}
+
 int main(void)
 {
-	waffle::ndarray<float, 3, 4> x(1.f);
-	waffle::ndarray<float, 3, 4, 5> y(2.f);
-	
-	waffle::Eval<decltype(x), decltype(y)> eval(x, y);
-	
-	decltype(y) z;
-	eval(z);
+	//waffle::ndarray<float, 3> x(1.f);
+	//waffle::ndarray<float, 4, 3> y(2.f);
 
-	//for (waffle::isize i = 0; i < 4; ++i) {
-	//	for (waffle::isize j = 0; j < 3; ++j) {
-	//		std::cout << z[i][j] << " ";
-	//	}
-	//	std::cout << std::endl;
-	//}
-	std::cout << z;
+	//auto z1 = x + y;
+	//std::cout << z1;
+
+	//auto z2 = y + x;
+	//std::cout << z2;
+
+	waffle::ndarray<double, 2, 3, 4> A(1.0);
+	A += 2.0;
+	A -= 4.0;
+	std::cout << A;
 }

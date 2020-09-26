@@ -18,6 +18,12 @@
     <ClInclude Include="array.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="intrinsics.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="integer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="waffle.cpp">

@@ -144,6 +144,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="array.hpp" />
+    <ClInclude Include="integer.hpp" />
+    <ClInclude Include="intrinsics.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="waffle.cpp" />
