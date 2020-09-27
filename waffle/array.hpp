@@ -195,7 +195,7 @@ namespace waffle
 	requires is_broadcastable_from_v<From, To>
 	struct assign_base;
 
-	namespace assign_op {
+	namespace assign_with {
 		template <typename T>
 		struct copy {
 			void operator()(const T &from, T &to) const { to = from; }
@@ -205,13 +205,21 @@ namespace waffle
 		struct add {
 			void operator()(const T &from, T &to) const { to += from; }
 		};
+
+		template <typename T>
+		struct sub {
+			void operator()(const T &from, T &to) const { to -= from; }
+		};
 	}
 
 	template <typename From, typename To>
-	using copy_assign = assign_base<From, To, assign_op::copy>;
+	using copy_assign = assign_base<From, To, assign_with::copy>;
 
 	template <typename From, typename To>
-	using add_assign = assign_base<From, To, assign_op::add>;
+	using add_assign = assign_base<From, To, assign_with::add>;
+
+	template <typename From, typename To>
+	using sub_assign = assign_base<From, To, assign_with::sub>;
 
 	
 
@@ -226,48 +234,44 @@ namespace waffle
 		T data[S];
 
 		
-		/* trivially default-constructible / copy-constructible / assignable */
+		/* waffle::array is trivial as long as its primitive is trivial */
 		
 		array() = default;
-		//array(const array &) = default;
-		//array & operator=(const array &) = default;
+		array(const array &) = default;
+		array & operator=(const array &) = default;
+		array(array &&) = default;
+		array & operator=(array &&) = default;
+		~array() = default;
 
 
 		/* ctor / assignment when the argument is broadcastable to T */
 		
-		template <broadcastable_to<array> SubArr>
-		array(const SubArr &sub_arr) : data() {
-			std::cout << "copy ctor with dim = " << S << std::endl;
-			copy_assign<SubArr, array>()(sub_arr, *this);
-		}
-
-		template <broadcastable_to<array> SubArray>
-		array & operator+=(const SubArray &sub_array) {
-			std::cout << "add-assign with dim = " << S << std::endl;
-			add_assign<SubArray, array>()(sub_array, *this);
-			return *this;
+		template <broadcastable_to<array> From>
+		requires (!std::is_same_v<From, array>)
+		array(const From &from) : data() {
+			// std::cout << "copy ctor with dim = " << S << std::endl;
+			copy_assign<From, array>()(from, *this);
 		}
 
 		template <broadcastable_to<array> From>
+		requires (!std::is_same_v<From, array>)
 		array & operator=(const From &from) {
 			std::cout << "assign ctor with dim = " << S << std::endl;
 			copy_assign<From, array>()(from, *this);
 			return *this;
 		}
 
-
-
-		array & operator-=(const array &rhs) {
-			for (isize i = 0; i < S; ++i) data[i] -= rhs.data[i];
+		template <broadcastable_to<array> From>
+		array & operator+=(const From &from) {
+			// std::cout << "add-assign with dim = " << S << std::endl;
+			add_assign<From, array>()(from, *this);
 			return *this;
 		}
 
-		template <directly_broadcastable_to<T> SubT>
-		array & operator-=(const SubT &sub_arr) {
+		template <broadcastable_to<array> From>
+		array & operator-=(const From &from) {
 			std::cout << "sub-assign with dim = " << S << std::endl;
-			for (isize i = 0; i < S; ++i) {
-				data[i] -= T(sub_arr);
-			}
+			sub_assign<From, array>()(from, *this);
 			return *this;
 		}
 
@@ -317,8 +321,24 @@ namespace waffle
 	{
 		void operator()(const Prim &from, array<Prim, ToSize> &to) const {
 			if constexpr (simdable<Prim>) {
-				// ... ...
-				assert(false);
+				for (isize i = 0; i + avx_stride<Prim> <= ToSize; i += avx_stride<Prim>) {
+					avx_reg<Prim> mfrom(from);
+					avx_reg<Prim> mto(to.data);
+					Op<avx_reg<Prim>>()(mfrom, mto);
+					mto.storeu(to.data + i);
+					//std::cout << "AVX call" << std::endl;
+				}
+				for (isize i = (ToSize / 8) * 8; i + sse_stride<Prim> <= ToSize; i += sse_stride<Prim>) {
+					sse_reg<Prim> mfrom(from);
+					sse_reg<Prim> mto(to.data + i);
+					Op<sse_reg<Prim>>()(mfrom, mto);
+					mto.storeu(to.data + i);
+					//std::cout << "SSE call" << std::endl;
+				}
+				for (isize i = (ToSize / 4) * 4; i < ToSize; ++i) {
+					Op<Prim>()(from, to[i]);
+					//std::cout << "fallback to scalar" << std::endl;
+				}
 			}
 			else {
 				for (isize i = 0; i < ToSize; ++i) Op<Prim>()(from, to[i]);

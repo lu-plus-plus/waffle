@@ -4,25 +4,15 @@
 
 
 
-template <typename T, template <typename> typename Op>
-T eval(const T &a, const T &b)
-{
-	return Op<T>()(a, b);
-}
-
 int main(void)
 {
-	//waffle::ndarray<float, 3> x(1.f);
-	//waffle::ndarray<float, 4, 3> y(2.f);
+	waffle::ndarray<float, 13> A(1.f);
+	//A += 2.f;
 
-	//auto z1 = x + y;
-	//std::cout << z1;
-
-	//auto z2 = y + x;
-	//std::cout << z2;
-
-	waffle::ndarray<double, 2, 3, 4> A(1.0);
-	A += 2.0;
-	A -= 4.0;
-	std::cout << A;
+	//float A[4] = { 1.f, 1.f, 1.f, 1.f };
+	//float B[4];
+	//waffle::mregf<4> a(A);
+	//waffle::mregf<4> b(A);
+	//a = b;
+	//a.storeu(B);
 }
