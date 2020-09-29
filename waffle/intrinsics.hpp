@@ -69,10 +69,10 @@ namespace waffle {
 
 		/* arithmetic op */
 
-		mregf & operator+=(const mregf &rhs) { _mm_add_ps(raw, rhs.raw); return *this; }
-		mregf & operator-=(const mregf &rhs) { _mm_sub_ps(raw, rhs.raw); return *this; }
-		mregf & operator*=(const mregf &rhs) { _mm_mul_ps(raw, rhs.raw); return *this; }
-		mregf & operator/=(const mregf &rhs) { _mm_div_ps(raw, rhs.raw); return *this; }
+		mregf & operator+=(const mregf &rhs) { raw = _mm_add_ps(raw, rhs.raw); return *this; }
+		mregf & operator-=(const mregf &rhs) { raw = _mm_sub_ps(raw, rhs.raw); return *this; }
+		mregf & operator*=(const mregf &rhs) { raw = _mm_mul_ps(raw, rhs.raw); return *this; }
+		mregf & operator/=(const mregf &rhs) { raw = _mm_div_ps(raw, rhs.raw); return *this; }
 
 		friend mregf operator+(const mregf &lhs, const mregf &rhs) { return mregf(lhs) += rhs; }
 		friend mregf operator-(const mregf &lhs, const mregf &rhs) { return mregf(lhs) -= rhs; }
@@ -85,9 +85,9 @@ namespace waffle {
 
 		/* bitwise op */
 
-		mregf & operator&=(const mregf &rhs) { _mm_and_ps(raw, rhs.raw); return *this; }
-		mregf & operator|=(const mregf &rhs) { _mm_or_ps(raw, rhs.raw); return *this; }
-		mregf & operator^=(const mregf &rhs) { _mm_xor_ps(raw, rhs.raw); return *this; }
+		mregf & operator&=(const mregf &rhs) { raw = _mm_and_ps(raw, rhs.raw); return *this; }
+		mregf & operator|=(const mregf &rhs) { raw = _mm_or_ps(raw, rhs.raw); return *this; }
+		mregf & operator^=(const mregf &rhs) { raw = _mm_xor_ps(raw, rhs.raw); return *this; }
 
 		friend mregf operator&(const mregf &lhs, const mregf &rhs) { return mregf(lhs) &= rhs; }
 		friend mregf operator|(const mregf &lhs, const mregf &rhs) { return mregf(lhs) |= rhs; }
@@ -173,10 +173,10 @@ namespace waffle {
 
 		/* arithmetic op */
 
-		mregf & operator+=(const mregf & rhs) { _mm256_add_ps(raw, rhs.raw); return *this; }
-		mregf & operator-=(const mregf & rhs) { _mm256_sub_ps(raw, rhs.raw); return *this; }
-		mregf & operator*=(const mregf & rhs) { _mm256_mul_ps(raw, rhs.raw); return *this; }
-		mregf & operator/=(const mregf & rhs) { _mm256_div_ps(raw, rhs.raw); return *this; }
+		mregf & operator+=(const mregf & rhs) { raw = _mm256_add_ps(raw, rhs.raw); return *this; }
+		mregf & operator-=(const mregf & rhs) { raw = _mm256_sub_ps(raw, rhs.raw); return *this; }
+		mregf & operator*=(const mregf & rhs) { raw = _mm256_mul_ps(raw, rhs.raw); return *this; }
+		mregf & operator/=(const mregf & rhs) { raw = _mm256_div_ps(raw, rhs.raw); return *this; }
 
 		friend mregf operator+(const mregf & lhs, const mregf & rhs) { return mregf(lhs) += rhs; }
 		friend mregf operator-(const mregf & lhs, const mregf & rhs) { return mregf(lhs) -= rhs; }
@@ -189,9 +189,9 @@ namespace waffle {
 
 		/* bitwise op */
 
-		mregf & operator&=(const mregf & rhs) { _mm256_and_ps(raw, rhs.raw); return *this; }
-		mregf & operator|=(const mregf & rhs) { _mm256_or_ps(raw, rhs.raw); return *this; }
-		mregf & operator^=(const mregf & rhs) { _mm256_xor_ps(raw, rhs.raw); return *this; }
+		mregf & operator&=(const mregf & rhs) { raw = _mm256_and_ps(raw, rhs.raw); return *this; }
+		mregf & operator|=(const mregf & rhs) { raw = _mm256_or_ps(raw, rhs.raw); return *this; }
+		mregf & operator^=(const mregf & rhs) { raw = _mm256_xor_ps(raw, rhs.raw); return *this; }
 
 		friend mregf operator&(const mregf & lhs, const mregf & rhs) { return mregf(lhs) &= rhs; }
 		friend mregf operator|(const mregf & lhs, const mregf & rhs) { return mregf(lhs) |= rhs; }
@@ -278,10 +278,10 @@ namespace waffle {
 
 		/* arithmetic op */
 
-		mregi32 & operator+=(const mregi32 &rhs) { _mm_add_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator-=(const mregi32 &rhs) { _mm_sub_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator*=(const mregi32 &rhs) { _mm_mul_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator/=(const mregi32 &rhs) { _mm_div_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator+=(const mregi32 &rhs) { raw = _mm_add_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator-=(const mregi32 &rhs) { raw = _mm_sub_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator*=(const mregi32 &rhs) { raw = _mm_mul_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator/=(const mregi32 &rhs) { raw = _mm_div_epi32(raw, rhs.raw); return *this; }
 
 		friend mregi32 operator+(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) += rhs; }
 		friend mregi32 operator-(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) -= rhs; }
@@ -293,9 +293,9 @@ namespace waffle {
 
 		/* bitwise op */
 
-		mregi32 & operator&=(const mregi32 &rhs) { _mm_and_si128(raw, rhs.raw); return *this; }
-		mregi32 & operator|=(const mregi32 &rhs) { _mm_or_si128(raw, rhs.raw); return *this; }
-		mregi32 & operator^=(const mregi32 &rhs) { _mm_xor_si128(raw, rhs.raw); return *this; }
+		mregi32 & operator&=(const mregi32 &rhs) { raw = _mm_and_si128(raw, rhs.raw); return *this; }
+		mregi32 & operator|=(const mregi32 &rhs) { raw = _mm_or_si128(raw, rhs.raw); return *this; }
+		mregi32 & operator^=(const mregi32 &rhs) { raw = _mm_xor_si128(raw, rhs.raw); return *this; }
 
 		friend mregi32 operator&(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) &= rhs; }
 		friend mregi32 operator|(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) |= rhs; }
@@ -382,10 +382,10 @@ namespace waffle {
 
 		/* arithmetic op */
 
-		mregi32 & operator+=(const mregi32 & rhs) { _mm256_add_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator-=(const mregi32 & rhs) { _mm256_sub_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator*=(const mregi32 & rhs) { _mm256_mul_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator/=(const mregi32 & rhs) { _mm256_div_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator+=(const mregi32 & rhs) { raw = _mm256_add_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator-=(const mregi32 & rhs) { raw = _mm256_sub_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator*=(const mregi32 & rhs) { raw = _mm256_mul_epi32(raw, rhs.raw); return *this; }
+		mregi32 & operator/=(const mregi32 & rhs) { raw = _mm256_div_epi32(raw, rhs.raw); return *this; }
 
 		friend mregi32 operator+(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) += rhs; }
 		friend mregi32 operator-(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) -= rhs; }
@@ -397,9 +397,9 @@ namespace waffle {
 
 		/* bitwise op */
 
-		mregi32 & operator&=(const mregi32 & rhs) { _mm256_and_si256(raw, rhs.raw); return *this; }
-		mregi32 & operator|=(const mregi32 & rhs) { _mm256_or_si256(raw, rhs.raw); return *this; }
-		mregi32 & operator^=(const mregi32 & rhs) { _mm256_xor_si256(raw, rhs.raw); return *this; }
+		mregi32 & operator&=(const mregi32 & rhs) { raw = _mm256_and_si256(raw, rhs.raw); return *this; }
+		mregi32 & operator|=(const mregi32 & rhs) { raw = _mm256_or_si256(raw, rhs.raw); return *this; }
+		mregi32 & operator^=(const mregi32 & rhs) { raw = _mm256_xor_si256(raw, rhs.raw); return *this; }
 
 		friend mregi32 operator&(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) &= rhs; }
 		friend mregi32 operator|(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) |= rhs; }
@@ -510,9 +510,6 @@ namespace waffle {
 
 	template <typename T>
 	concept simdable = std::is_same_v<T, float> || std::is_same_v<T, int>;
-
-	template <typename T>
-	concept non_simdable = (!simdable<T>);
 
 	template <simdable T>
 	struct avx;
