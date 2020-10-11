@@ -225,10 +225,49 @@ namespace waffle
 	requires
 		(is_array_v<ToElem> || (!simdable<ToElem>))		// an array, of arrays or non-simd-able primitives
 		&& (true && ... && is_broadcastable_from_v<Froms, array<ToElem, ToSize>>)
-		void map(Fn fn, array<ToElem, ToSize> &to, Froms ... froms)
+	void map(Fn fn, array<ToElem, ToSize> &to, Froms ... froms)
 	{
 		for (isize i = 0; i < ToSize; ++i)
 			map<Fn>(fn, to[i], detail::load_wrt<array<ToElem, ToSize>, Froms>(froms, i)...);
+	}
+
+
+
+	/* reduce, for horizontal operations */
+
+	template <typename Dest, typename Src, typename Fn>
+	requires is_broadcastable_from_v<Dest, Src>
+	void reduce(Dest &dest, const Src &src, Fn fn)
+	{
+		if constexpr (!is_array_v<Src>) {
+			fn(dest, src);
+		}
+		else if constexpr ((simdable<array_primitive_t<Src>> && array_depth_v<Src> == 1 && std::is_same_v<Dest, Src>)) {
+			fn(dest, src);
+		}
+		else {
+			if constexpr (is_tightly_broadcastable_from_v<Dest, Src>) {
+				for (usize i = 0; i < array_size_v<Src>; ++i) reduce(dest[i], src[i], fn);
+			}
+			else {
+				for (usize i = 0; i < array_size_v<Src>; ++i) reduce(dest, src[i], fn);
+			}
+		}
+	}
+
+	// commonly used horizontal operations
+
+	template <typename Src, typename Fn>
+	auto reduce(const array_primitive_t<Src> &init, const Src &src, Fn fn)
+	{
+		if constexpr (is_array_v<Src>) {
+			array_primitive_t<Src> prim(init);
+			reduce(prim, src, fn);
+			return prim;
+		}
+		else {
+			return src;
+		}
 	}
 
 	

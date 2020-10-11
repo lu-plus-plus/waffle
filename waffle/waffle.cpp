@@ -7,9 +7,6 @@
 
 
 
-template <typename T>
-using arraytest = waffle::ndarray<T, 2, 3>;
-
 int main(void)
 {
 	waffle::ndarray<float, 13, 2, 2> a(5.f);
@@ -17,7 +14,10 @@ int main(void)
 	auto c = b / a;
 	std::cout << c << std::endl;
 
-	float f1 = 1.f;
-	float f2 = 2.f;
-	waffle::Vector3f<arraytest> dv(1.f, f1, std::move(f2));
+	waffle::ndarray<float, 13> d(0.f);
+	auto my_plus = [] <typename T> (T & dest, const T & src) { dest += src; };
+	waffle::reduce(d, c, my_plus);
+	std::cout << d << std::endl;
+
+	std::cout << waffle::reduce(0.f, d, my_plus) << std::endl;
 }
