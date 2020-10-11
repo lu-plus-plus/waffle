@@ -2,13 +2,12 @@
 
 #include <type_traits>
 #include <concepts>
-#include <functional>
 
 #include <cassert>
 
 #include <iostream>
 
-#include "integer.hpp"
+#include "arithmetics.hpp"
 #include "intrinsics.hpp"
 
 
@@ -16,8 +15,18 @@
 namespace waffle
 {
 
+	/* declaration */
+
+
+
+	// array
+
 	template <typename T, isize S>
 	struct array;
+
+
+
+	// ndarray
 
 	namespace detail {
 		template <typename T, isize ... Dims>
@@ -32,16 +41,15 @@ namespace waffle
 		struct ndarray_helper<T, OutestDim> {
 			using type = array<T, OutestDim>;
 		};
-
-		template <isize ... Dims>
-		concept non_empty_isize_pack = (sizeof...(Dims) > 0);
 	}
 
 	template <typename T, isize ... Dims>
-	requires detail::non_empty_isize_pack<Dims...>
+	requires (sizeof...(Dims) > 0)
 	using ndarray = typename detail::ndarray_helper<T, Dims...>::type;
 
 
+
+	// type traits of _array_
 
 	template <typename InstType>
 	struct is_array : std::false_type {};
@@ -57,49 +65,42 @@ namespace waffle
 
 
 
+	template <arrayname T>
+	struct unwrap_array;
+
 	namespace detail {
 		template <typename T>
 		struct unwrap_helper {
-			using primitive_type = T;
+			using primitive = T;
 			static constexpr isize depth = 0;
 		};
 
 		template <typename T, isize S>
 		struct unwrap_helper<array<T, S>> {
-			using primitive_type = typename unwrap_helper<T>::primitive_type;
+			using primitive = typename unwrap_helper<T>::primitive;
 			static constexpr isize depth = 1 + unwrap_helper<T>::depth;
 		};
 	}
 
-	template <arrayname T>
-	struct unwrap_array;
-
 	template <typename T, isize S>
 	struct unwrap_array<array<T, S>> {
-		using element_type = T;
+		using element = T;
 		static constexpr isize size = S;
-		using primitive_type = typename detail::unwrap_helper<array<T, S>>::primitive_type;
+		using primitive = typename detail::unwrap_helper<array<T, S>>::primitive;
 		static constexpr isize depth = detail::unwrap_helper<array<T, S>>::depth;
 	};
 
 	template <arrayname T>
-	using array_element_type = typename unwrap_array<T>::element_type;
+	using array_element_t = typename unwrap_array<T>::element;
 
 	template <arrayname T>
-	inline constexpr isize array_size = unwrap_array<T>::size;
+	inline constexpr isize array_size_v = unwrap_array<T>::size;
 
 	template <arrayname T>
-	using array_primitive_type = typename unwrap_array<T>::primitive_type;
+	using array_primitive_t = typename unwrap_array<T>::primitive;
 
 	template <arrayname T>
-	inline constexpr isize array_depth = unwrap_array<T>::depth;
-
-	namespace test {
-		using array_et = array_element_type<ndarray<float, 3, 4>>;
-		using array_pt = array_primitive_type<ndarray<float, 3, 4>>;
-		bool array_s = array_size<ndarray<float, 3, 4>>;
-		isize array_d = array_depth<ndarray<float, 3, 4>>;
-	}
+	inline constexpr isize array_depth_v = unwrap_array<T>::depth;
 
 
 
@@ -111,7 +112,7 @@ namespace waffle
 	struct is_broadcastable_from<Prim, Prim> : std::true_type {};
 	
 	template <typename Prim, typename Elem, isize Size>
-	requires (std::is_same_v<Prim, array_primitive_type<array<Elem, Size>>>)
+	requires (std::is_same_v<Prim, array_primitive_t<array<Elem, Size>>>)
 	struct is_broadcastable_from<Prim, array<Elem, Size>> : std::true_type {};
 
 	template <typename FromType, isize FromSize, typename ToType, isize ToSize>
@@ -126,13 +127,6 @@ namespace waffle
 
 	template <typename From, typename To>
 	concept broadcastable_to = is_broadcastable_from_v<From, To>;
-
-	namespace test {
-		bool bc1 = is_broadcastable_from_v<float, float>;
-		bool bc2 = is_broadcastable_from_v<float, ndarray<float, 3, 4>>;
-		bool bc3 = is_broadcastable_from_v<ndarray<float, 3, 5>, ndarray<float, 2, 3, 4, 5, 6>>;
-		bool bc4 = is_broadcastable_from_v<ndarray<float, 5, 4>, ndarray<float, 2, 3, 4, 5, 6>>;
-	}
 
 
 
@@ -153,12 +147,6 @@ namespace waffle
 
 	template <typename From, typename To>
 	concept directly_broadcastable_to = is_directly_broadcastable_from_v<From, To>;
-
-	namespace test {
-		bool dbc0 = is_directly_broadcastable_from_v<float, float>;
-		bool dbc1 = is_directly_broadcastable_from_v<ndarray<float, 3, 4>, ndarray<float, 3, 4, 5>>;
-		bool dbc2 = is_directly_broadcastable_from_v<ndarray<float, 3, 5>, ndarray<float, 3, 4, 5>>;
-	}
 
 
 
@@ -182,50 +170,74 @@ namespace waffle
 	template <typename From, typename To>
 	concept tightly_broadcastable_to = is_tightly_broadcastable_from_v<From, To>;
 
-	namespace test {
-		bool tbc0 = is_tightly_broadcastable_from_v<float, float>;
-		bool tbc1 = is_tightly_broadcastable_from_v<ndarray<float, 3, 5>, ndarray<float, 3, 4, 5>>;
-		bool tbc2 = is_tightly_broadcastable_from_v<ndarray<float, 3, 5>, ndarray<float, 3, 4, 5, 5>>;
+
+
+	// map, for loop fusion
+
+	template <typename Fn, typename Scalar, typename ... Args>
+	requires
+		(!is_array_v<Scalar>)
+		&& (true && ... && std::is_same_v<Scalar, Args>)
+	void map(Fn fn, Scalar &scalar, Args ... args)
+	{
+		fn(scalar, args...);
 	}
 
+	namespace detail {
+		template <typename To, typename From>
+		auto load_wrt(const From &from, isize i) {
+			if constexpr (is_tightly_broadcastable_from_v<From, To>) return from[i];
+			else return from;
+		}
 
+		template <typename From>
+		auto load_simd_reg(const From &from, isize offset) {
+			if constexpr (is_array_v<From>) return from.data + offset;
+			else return from;
+		}
+	}
 
-	/* declaration of operations */
+	template <typename Fn, typename Scalar, isize Size, typename ... Froms>
+	requires
+		simdable<Scalar>
+		&& (true && ... && is_broadcastable_from_v<Froms, array<Scalar, Size>>)
+	void map(Fn fn, array<Scalar, Size> &to, Froms ... froms)
+	{
+		for (isize i = 0; i < Size / avx_stride<Scalar>; ++i) {
+			avx_reg<Scalar> mto(to.data + i * avx_stride<Scalar>);
+			fn(mto, avx_reg<Scalar>(detail::load_simd_reg(froms, i * avx_stride<Scalar>))...);
+			mto.storeu(to.data + i * avx_stride<Scalar>);
+		}
 
-	template <typename From, typename To, template <typename> typename Op>
-	requires is_broadcastable_from_v<From, To>
-	struct assign_base;
+		static_assert(avx_stride<Scalar> == 2 * sse_stride<Scalar>);
+		for (isize i = 2 * (Size / avx_stride<Scalar>); i < Size / sse_stride<Scalar>; ++i) {
+			sse_reg<Scalar> mto(to.data + i * sse_stride<Scalar>);
+			fn(mto, sse_reg<Scalar>(detail::load_simd_reg(froms, i * sse_stride<Scalar>))...);
+			mto.storeu(to.data + i * sse_stride<Scalar>);
+		}
 
-	namespace assign_with {
-		template <typename T>
-		struct copy {
-			void operator()(const T &from, T &to) const { to = from; }
-		};
+		for (isize i = sse_stride<Scalar> * (Size / sse_stride<Scalar>); i < Size; ++i) {
+			fn(to[i], detail::load_wrt<array<Scalar, Size>>(froms, i)...);
+		}
+	}
 
-		template <typename T>
-		struct add {
-			void operator()(const T &from, T &to) const { to += from; }
-		};
-
-		template <typename T>
-		struct sub {
-			void operator()(const T &from, T &to) const { to -= from; }
-		};
-
-		template <typename T>
-		struct mul {
-			void operator()(const T &from, T &to) const { to *= from; }
-		};
-
-		template <typename T>
-		struct div {
-			void operator()(const T &from, T &to) const { to /= from; }
-		};
+	template <typename Fn, typename ToElem, isize ToSize, typename ... Froms>
+	requires
+		(is_array_v<ToElem> || (!simdable<ToElem>))		// an array, of arrays or non-simd-able primitives
+		&& (true && ... && is_broadcastable_from_v<Froms, array<ToElem, ToSize>>)
+		void map(Fn fn, array<ToElem, ToSize> &to, Froms ... froms)
+	{
+		for (isize i = 0; i < ToSize; ++i)
+			map<Fn>(fn, to[i], detail::load_wrt<array<ToElem, ToSize>, Froms>(froms, i)...);
 	}
 
 	
 
 	/* implementation */
+
+
+
+	// array
 
 	template <typename T, isize S>
 	struct array
@@ -250,15 +262,16 @@ namespace waffle
 		
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
-		explicit array(const From &from) : data() {
-			assign_base<From, array, assign_with::copy>()(from, *this);
+		explicit array(const From &from) {
+			auto copy = [] <typename T> (T & a, const T & b) { a = b; };
+			map(copy, *this, from);
 		}
 
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
 		array & operator=(const From &from) {
-			assign_base<From, array, assign_with::copy>()(from, *this);
-			return *this;
+			auto copy = [] <typename T> (T & a, const T & b) { a = b; };
+			map(copy, *this, from);
 		}
 
 
@@ -268,329 +281,118 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator+=(const From &from) {
-			assign_base<From, array, assign_with::add>()(from, *this);
+			auto add_assign = [] <typename T> (T & a, const T & b) { a += b; };
+			map(add_assign, *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
-		friend array operator+(const From &from, const array &to) { return array(to) += from; }
+		friend array operator+(const From &from, const array &to) {
+			auto add_copy = [] <typename T> (T & a, const T & b, const T & c) { a = b + c; };
+			array result;
+			map(add_copy, result, from, to);
+			return result;
+		}
+		
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
-		friend array operator+(const array &to, const From &from) { return array(to) += from; }
+		friend array operator+(const array &to, const From &from) {
+			return from + to;
+		}
 
 		// sub
 
 		template <broadcastable_to<array> From>
 		array & operator-=(const From &from) {
-			assign_base<From, array, assign_with::sub>()(from, *this);
+			auto binary_sub = [] <typename T> (T & a, const T & b) { a -= b; };
+			map(binary_sub, *this, from);
 			return *this;
 		}
 
-		//template <broadcastable_to<array> From>
-		//friend array operator-(const From &from, const array &to) { return array(to) -= from; }
 		template <broadcastable_to<array> From>
-		// requires (!std::is_same_v<From, array>)
-		friend array operator-(const array &to, const From &from) { return array(to) -= from; }
+		friend array operator-(const From &from, const array &to) {
+			auto ternary_sub = [] <typename T> (T & a, const T & b, const T & c) { a = b - c; };
+			array result;
+			map(ternary_sub, result, from, to);
+			return result;
+		}
+
+		template <broadcastable_to<array> From>
+		requires (!std::is_same_v<From, array>)
+		friend array operator-(const array &to, const From &from) {
+			auto ternary_sub = [] <typename T> (T & a, const T & b, const T & c) { a = b - c; };
+			array result;
+			map(ternary_sub, result, to, from);
+			return result;
+		}
+
+		// mul
 
 		template <broadcastable_to<array> From>
 		array & operator*=(const From &from) {
-			assign_base<From, array, assign_with::mul>()(from, *this);
+			auto binary_mul = [] <typename T> (T & a, const T & b) { a *= b; };
+			map(binary_mul, *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
-		friend array operator*(const From &from, const array &to) { return array(to) *= from; }
+		friend array operator*(const From &from, const array &to) {
+			auto ternary_mul = [] <typename T> (T & a, const T & b, const T & c) { a = b * c; };
+			array result;
+			map(ternary_mul, result, from, to);
+			return result;
+		}
+
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
-		friend array operator*(const array &to, const From &from) { return array(to) *= from; }
+		friend array operator*(const array &to, const From &from) {
+			return from * to;
+		}
+
+		// div
 
 		template <broadcastable_to<array> From>
 		array & operator/=(const From &from) {
-			assign_base<From, array, assign_with::div>()(from, *this);
+			auto binary_div = [] <typename T> (T & a, const T & b) { a /= b; };
+			map(binary_div, *this, from);
 			return *this;
 		}
 
-		//template <broadcastable_to<array> From>
-		//friend array operator/(const From &from, const array &to) { return array(to) /= from; }
 		template <broadcastable_to<array> From>
-		// requires (!std::is_same_v<From, array>)
-		friend array operator/(const array &to, const From &from) { return array(to) /= from; }
+		friend array operator/(const From &from, const array &to) {
+			auto ternary_div = [] <typename T> (T & a, const T & b, const T & c) { a = b / c; };
+			array result;
+			map(ternary_div, result, from, to);
+			return result;
+		}
+
+		template <broadcastable_to<array> From>
+		requires (!std::is_same_v<From, array>)
+		friend array operator/(const array &to, const From &from) {
+			auto ternary_div = [] <typename T> (T & a, const T & b, const T & c) { a = b / c; };
+			array result;
+			map(ternary_div, result, to, from);
+			return result;
+		}
 
 
 		/* data access */
 
 		T & operator[](isize i) { assert(i < S); return data[i]; }
 		const T & operator[](isize i) const { assert(i < S); return data[i]; }
-	};
 
 
+		/* output */
 
-	// assigning scalar to 1-d array
-	// SIMD or fallback, dispatched in constexpr if
-
-	template <typename Prim, isize ToSize, template <typename> typename Op>
-	requires (!is_array_v<Prim>)
-	struct assign_base<Prim, array<Prim, ToSize>, Op>
-	{
-		void operator()(const Prim &from, array<Prim, ToSize> &to) const {
-			if constexpr (simdable<Prim>) {
-				
-				for (isize i = 0; i < ToSize / avx_stride<Prim>; ++i) {
-					avx_reg<Prim> mfrom(from);
-					avx_reg<Prim> mto(to.data + i * avx_stride<Prim>);
-					Op<avx_reg<Prim>>()(mfrom, mto);
-					mto.storeu(to.data + i * avx_stride<Prim>);
-				}
-
-				static_assert(avx_stride<Prim> == 2 * sse_stride<Prim>);
-				for (isize i = 2 * (ToSize / avx_stride<Prim>); i < ToSize / sse_stride<Prim>; ++i) {
-					sse_reg<Prim> mfrom(from);
-					sse_reg<Prim> mto(to.data + i * sse_stride<Prim>);
-					Op<sse_reg<Prim>>()(mfrom, mto);
-					mto.storeu(to.data + i * sse_stride<Prim>);
-				}
-				
-				for (isize i = 4 * (ToSize / 4); i < ToSize; ++i) {
-					Op<Prim>()(from, to[i]);
-				}
-			
-			}
-			else {
-
-				for (isize i = 0; i < ToSize; ++i) Op<Prim>()(from, to[i]);
-			
-			}
+		friend std::ostream & operator<<(std::ostream &os, const array &A) {
+			// dim 1: [ ___ ,\t ___ ,\t ___ ]
+			// dim n: [ ___ ,\n ___ ,\n ___ ]
+			os << "[" << A[0];
+			for (isize i = 1; i < S; ++i) os << ',' << (array_depth_v<array> == 1 ? '\t' : '\n') << A[i];
+			os << "]";
+			return os;
 		}
+
 	};
-
-	// assigning 1-d array to 1-d array
-	// SIMD or fallback, dispatched in constexpr if
-
-	template <typename Prim, isize Size, template <typename> typename Op>
-	requires (!is_array_v<Prim>)
-		struct assign_base<array<Prim, Size>, array<Prim, Size>, Op>
-	{
-		void operator()(const array<Prim, Size> &from, array<Prim, Size> &to) const {
-			if constexpr (simdable<Prim>) {
-				
-				for (isize i = 0; i < Size / avx_stride<Prim>; ++i) {
-					avx_reg<Prim> mfrom(from.data + i * avx_stride<Prim>);
-					avx_reg<Prim> mto(to.data + i * avx_stride<Prim>);
-					Op<avx_reg<Prim>>()(mfrom, mto);
-					mto.storeu(to.data + i * avx_stride<Prim>);
-				}
-
-				static_assert(avx_stride<Prim> == 2 * sse_stride<Prim>);
-				for (isize i = 2 * (Size / avx_stride<Prim>); i < Size / sse_stride<Prim>; ++i) {
-					sse_reg<Prim> mfrom(from.data + i * sse_stride<Prim>);
-					sse_reg<Prim> mto(to.data + i * sse_stride<Prim>);
-					Op<sse_reg<Prim>>()(mfrom, mto);
-					mto.storeu(to.data + i * sse_stride<Prim>);
-				}
-
-				for (isize i = 4 * (Size / 4); i < Size; ++i) {
-					Op<Prim>()(from[i], to[i]);
-				}
-
-			}
-			else {
-
-				for (isize i = 0; i < Size; ++i) Op<Prim>()(from[i], to[i]);
-			
-			}
-		}
-	};
-
-	// assignment: scalar to n-d array, where n > 1
-	// reduced to (n-1)-d array
-
-	template <typename FromPrim, typename ToElem, isize ToSize, template <typename> typename Op>
-	requires (
-		!is_array_v<FromPrim>
-		&& !std::is_same_v<FromPrim, ToElem>
-		&& std::is_same_v<FromPrim, array_primitive_type<array<ToElem, ToSize>>>
-		)
-	struct assign_base<FromPrim, array<ToElem, ToSize>, Op>
-	{
-		void operator()(const FromPrim &from, array<ToElem, ToSize> &to) {
-			for (isize i = 0; i < ToSize; ++i) assign_base<FromPrim, ToElem, Op>()(from, to[i]);
-		}
-	};
-
-	// assignment: m-d array to n-d array, where m > 1 and and n > 1
-	// problem reduction: (m-1) to (n-1), or m to (n-1)
-
-	template <typename FromElem, isize FromSize, typename ToElem, isize ToSize, template <typename> typename Op>
-	requires (
-		(is_array_v<FromElem> || is_array_v<ToElem>)
-		&& is_broadcastable_from_v<array<FromElem, FromSize>, array<ToElem, ToSize>>
-		)
-		struct assign_base<array<FromElem, FromSize>, array<ToElem, ToSize>, Op>
-	{
-		void operator()(const array<FromElem, FromSize> &from, array<ToElem, ToSize> &to) {
-			if constexpr (is_tightly_broadcastable_from_v<array<FromElem, FromSize>, array<ToElem, ToSize>>) {
-				static_assert(FromSize == ToSize);
-				for (isize i = 0; i < ToSize; ++i) assign_base<FromElem, ToElem, Op>()(from[i], to[i]);
-			}
-			else {
-				for (isize i = 0; i < ToSize; ++i) assign_base<array<FromElem, FromSize>, ToElem, Op>()(from, to[i]);
-			}
-		}
-	};
-
-
-
-	template <typename T, isize S>
-	std::ostream & operator<<(std::ostream &os, const array<T, S> &A)
-	{
-		// dim 1: "[\t" ",\t" ... ",\t" "]\n"
-		// dim n: "[\t" "\n\t" ... "\n\t" "]\n"
-		os << "[" << A[0];
-		for (isize i = 1; i < S; ++i) {
-			os << (array_depth<array<T, S>> == 1 ? ",\t" : "\n") << A[i];
-		}
-		os << "]";
-		return os;
-	}
-
-
-
-	///* broadcasted evaluation */
-
-	//template <typename TyA, typename TyB>
-	//struct Eval;
-
-	//template <typename Prim>
-	//requires (!arrayname<Prim>)
-	//struct Eval<Prim, Prim> {
-	//	Prim &a, &b;
-	//	Eval(Prim &a, Prim &b) : a(a), b(b) {}
-
-	//	void operator()(Prim &result) { result = a + b; }
-	//};
-
-	//template <typename Prim, typename Elem, isize Size>
-	//requires (std::is_same_v<Prim, array_primitive_type<array<Elem, Size>>>)
-	//struct Eval<Prim, array<Elem, Size>> {
-	//	Prim &p;
-	//	array<Elem, Size> &A;
-	//	Eval(Prim &p, array<Elem, Size> &A) : p(p), A(A) {}
-
-	//	void operator()(array<Elem, Size> &result) {
-	//		for (isize i = 0; i < Size; ++i) Eval<Prim, Elem>(p, A[i])(result[i]);
-	//	}
-	//};
-
-	//template <typename FromElem, isize FromSize, typename ToElem, isize ToSize>
-	//struct Eval<array<FromElem, FromSize>, array<ToElem, ToSize>> {
-	//	array<FromElem, FromSize> &from;
-	//	array<ToElem, ToSize> &to;
-	//	Eval(array<FromElem, FromSize> &from, array<ToElem, ToSize> &to) : from(from), to(to) {}
-
-	//	void operator()(array<ToElem, ToSize> &result) {
-	//		for (isize i = 0; i < ToSize; ++i) {
-	//			if constexpr (FromSize == ToSize && !is_broadcastable_from_v<array<FromElem, FromSize>, ToElem>) {
-	//				Eval<FromElem, ToElem>(from[i], to[i])(result[i]);
-	//			}
-	//			else {
-	//				Eval<array<FromElem, FromSize>, ToElem>(from, to[i])(result[i]);
-	//			}
-	//		}
-	//	}
-	//};
-
-
-	//
-	//template <typename From, typename To>
-	//struct ArrayExpr;
-
-	///* primitive => primitive[N] */
-	//template <typename Prim, isize ToSize>
-	//requires (!arrayname<Prim>)
-	//struct ArrayExpr<Prim, array<Prim, ToSize>>
-	//{
-	//	const Prim &ref;
-	//	ArrayExpr(const Prim &prim) : ref(prim) {}
-
-	//	const Prim & operator[](isize i) const { assert(i < ToSize); return ref; }
-	//};
-
-	///* primititve => primitive[N1]...[Nm] */
-	//template <typename Prim, typename ToElem, isize ToSize>
-	//requires (!arrayname<Prim> && !std::is_same_v<Prim, ToElem>)
-	//struct ArrayExpr<Prim, array<ToElem, ToSize>>
-	//{
-	//	const Prim &ref;
-	//	ArrayExpr(const Prim &prim) : ref(prim) {}
-
-	//	ArrayExpr<Prim, ToElem> operator[](isize i) const {
-	//		assert(i < ToSize);
-	//		return ArrayExpr<Prim, ToElem>(ref);
-	//	}
-	//};
-
-	///* n-d array => n-d array, totally the same */
-	////template <typename Elem, isize Size>
-	////struct ArrayExpr<array<Elem, Size>, array<Elem, Size>>
-	////{
-	////	array<Elem, Size> &ref;
-	////	ArrayExpr(array<Elem, Size> &arr) : ref(arr) {}
-	////	Elem & operator[](isize i) const {
-	////		assert(i < Size);
-	////		return ref[i];
-	////	}
-	////};
-
-	//template <typename FromElem, typename ToElem, isize Size>
-	//requires is_tightly_broadcastable_from_v<array<FromElem, Size>, array<ToElem, Size>>
-	//struct ArrayExpr<array<FromElem, Size>, array<ToElem, Size>>
-	//{
-	//	const array<FromElem, Size> &ref;
-	//	ArrayExpr(const array<FromElem, Size> &arr) : ref(arr) {}
-
-	//	ArrayExpr<FromElem, ToElem> operator[](isize i) const {
-	//		assert(i < Size);
-	//		return ArrayExpr<FromElem, ToElem>(ref[i]);
-	//	}
-	//};
-
-	//template <typename FromElem, isize FromSize, typename ToElem, isize ToSize>
-	//requires (!is_tightly_broadcastable_from_v<array<FromElem, FromSize>, array<ToElem, ToSize>>)
-	//struct ArrayExpr<array<FromElem, FromSize>, array<ToElem, ToSize>>
-	//{
-	//	const array<FromElem, FromSize> &ref;
-	//	ArrayExpr(const array<FromElem, FromSize> &arr) : ref(arr) {}
-	//	
-	//	ArrayExpr<array<FromElem, FromSize>, ToElem> operator[](isize i) const {
-	//		assert(i < ToSize);
-	//		return ArrayExpr<array<FromElem, FromSize>, ToElem>(ref);
-	//	}
-	//};
-
-
-
-	//template <typename From, typename ToElem, isize ToSize>
-	//array<ToElem, ToSize> operator+(
-	//	const ArrayExpr<From, array<ToElem, ToSize>> &expr_a,
-	//	const array<ToElem, ToSize> &b)
-	//{
-	//	array<ToElem, ToSize> c;
-	//	for (isize i = 0; i < ToSize; ++i) c[i] = expr_a[i] + b[i];
-	//	return c;
-	//}
-
-	//template <typename From, arrayname To>
-	//requires is_broadcastable_from_v<From, To>
-	//To operator+(const From &from, const To &to)
-	//{
-	//	return ArrayExpr<From, To>(from) + to;
-	//}
-
-	//template <typename From, arrayname To>
-	//requires (!is_broadcastable_from_v<To, From> && is_broadcastable_from_v<From, To>)
-	//To operator+(const To &to, const From &from)
-	//{
-	//	return ArrayExpr<From, To>(from) + to;
-	//}
 
 }

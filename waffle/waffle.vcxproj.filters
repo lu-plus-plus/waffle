@@ -21,7 +21,19 @@
     <ClInclude Include="intrinsics.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="integer.hpp">
+    <ClInclude Include="arithmetics.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vector.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="matrix.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="adjoint.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dynamic.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

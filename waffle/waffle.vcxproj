@@ -143,9 +143,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="adjoint.hpp" />
+    <ClInclude Include="arithmetics.hpp" />
     <ClInclude Include="array.hpp" />
-    <ClInclude Include="integer.hpp" />
+    <ClInclude Include="dynamic.hpp" />
     <ClInclude Include="intrinsics.hpp" />
+    <ClInclude Include="matrix.hpp" />
+    <ClInclude Include="vector.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="waffle.cpp" />

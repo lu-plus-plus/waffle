@@ -36,9 +36,15 @@ namespace waffle
 	}
 
 	template <template <typename> typename Container = scalar>
-	struct f32 : public detail::soa_base<float, Container> {};
+	struct f32 : public detail::soa_base<float, Container>
+	{
+		using detail::soa_base<float, Container>::soa_base;
+	};
 
 	template <template <typename> typename Container = scalar>
-	struct f64 : public detail::soa_base<double, Container> {};
+	struct f64 : public detail::soa_base<double, Container>
+	{
+		using detail::soa_base<double, Container>::soa_base;
+	};
 
 }
