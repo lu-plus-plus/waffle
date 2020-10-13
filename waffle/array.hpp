@@ -21,7 +21,7 @@ namespace waffle
 
 	// array
 
-	template <typename T, isize S>
+	template <typename T, usize S>
 	struct array;
 
 
@@ -29,21 +29,21 @@ namespace waffle
 	// ndarray
 
 	namespace detail {
-		template <typename T, isize ... Dims>
+		template <typename T, usize ... Dims>
 		struct ndarray_helper;
 
-		template <typename T, isize InnerDim, isize ... Dims>
+		template <typename T, usize InnerDim, usize ... Dims>
 		struct ndarray_helper<T, InnerDim, Dims...> {
 			using type = typename ndarray_helper<array<T, InnerDim>, Dims...>::type;
 		};
 
-		template <typename T, isize OutestDim>
+		template <typename T, usize OutestDim>
 		struct ndarray_helper<T, OutestDim> {
 			using type = array<T, OutestDim>;
 		};
 	}
 
-	template <typename T, isize ... Dims>
+	template <typename T, usize ... Dims>
 	requires (sizeof...(Dims) > 0)
 	using ndarray = typename detail::ndarray_helper<T, Dims...>::type;
 
@@ -54,7 +54,7 @@ namespace waffle
 	template <typename InstType>
 	struct is_array : std::false_type {};
 
-	template <typename T, isize S>
+	template <typename T, usize S>
 	struct is_array<array<T, S>> : std::true_type {};
 
 	template <typename InstType>
@@ -72,35 +72,35 @@ namespace waffle
 		template <typename T>
 		struct unwrap_helper {
 			using primitive = T;
-			static constexpr isize depth = 0;
+			static constexpr usize depth = 0;
 		};
 
-		template <typename T, isize S>
+		template <typename T, usize S>
 		struct unwrap_helper<array<T, S>> {
 			using primitive = typename unwrap_helper<T>::primitive;
-			static constexpr isize depth = 1 + unwrap_helper<T>::depth;
+			static constexpr usize depth = 1 + unwrap_helper<T>::depth;
 		};
 	}
 
-	template <typename T, isize S>
+	template <typename T, usize S>
 	struct unwrap_array<array<T, S>> {
 		using element = T;
-		static constexpr isize size = S;
+		static constexpr usize size = S;
 		using primitive = typename detail::unwrap_helper<array<T, S>>::primitive;
-		static constexpr isize depth = detail::unwrap_helper<array<T, S>>::depth;
+		static constexpr usize depth = detail::unwrap_helper<array<T, S>>::depth;
 	};
 
 	template <arrayname T>
 	using array_element_t = typename unwrap_array<T>::element;
 
 	template <arrayname T>
-	inline constexpr isize array_size_v = unwrap_array<T>::size;
+	inline constexpr usize array_size_v = unwrap_array<T>::size;
 
 	template <arrayname T>
 	using array_primitive_t = typename unwrap_array<T>::primitive;
 
 	template <arrayname T>
-	inline constexpr isize array_depth_v = unwrap_array<T>::depth;
+	inline constexpr usize array_depth_v = unwrap_array<T>::depth;
 
 
 
@@ -111,11 +111,11 @@ namespace waffle
 	requires (!arrayname<Prim>)
 	struct is_broadcastable_from<Prim, Prim> : std::true_type {};
 	
-	template <typename Prim, typename Elem, isize Size>
+	template <typename Prim, typename Elem, usize Size>
 	requires (std::is_same_v<Prim, array_primitive_t<array<Elem, Size>>>)
 	struct is_broadcastable_from<Prim, array<Elem, Size>> : std::true_type {};
 
-	template <typename FromType, isize FromSize, typename ToType, isize ToSize>
+	template <typename FromType, usize FromSize, typename ToType, usize ToSize>
 	struct is_broadcastable_from<array<FromType, FromSize>, array<ToType, ToSize>> {
 		static constexpr bool value =
 			is_broadcastable_from<array<FromType, FromSize>, ToType>::value
@@ -136,7 +136,7 @@ namespace waffle
 	template <typename Inst>
 	struct is_directly_broadcastable_from<Inst, Inst> : std::true_type {};
 
-	template <typename From, typename ToElem, isize ToSize>
+	template <typename From, typename ToElem, usize ToSize>
 	requires (!std::is_same_v<From, array<ToElem, ToSize>>)
 	struct is_directly_broadcastable_from<From, array<ToElem, ToSize>> {
 		static constexpr bool value = is_directly_broadcastable_from<From, ToElem>::value;
@@ -156,7 +156,7 @@ namespace waffle
 	template <typename Inst>
 	struct is_tightly_broadcastable_from<Inst, Inst> : std::true_type {};
 
-	template <typename From, typename ToElem, isize ToSize>
+	template <typename From, typename ToElem, usize ToSize>
 	requires (!std::is_same_v<From, array<ToElem, ToSize>>)
 	struct is_tightly_broadcastable_from<From, array<ToElem, ToSize>> {
 		static constexpr bool value =
@@ -174,61 +174,59 @@ namespace waffle
 
 	// map, for loop fusion
 
-	template <typename Fn, typename Scalar, typename ... Args>
-	requires
-		(!is_array_v<Scalar>)
-		&& (true && ... && std::is_same_v<Scalar, Args>)
-	void map(Fn fn, Scalar &scalar, Args ... args)
-	{
-		fn(scalar, args...);
-	}
+	template <typename Fn, typename To, typename ... Froms>
+	void map(Fn fn, To &to, Froms ... froms);
 
 	namespace detail {
 		template <typename To, typename From>
-		auto load_wrt(const From &from, isize i) {
+		auto subscript_proxy(const From &from, usize i) {
 			if constexpr (is_tightly_broadcastable_from_v<From, To>) return from[i];
 			else return from;
 		}
 
 		template <typename From>
-		auto load_simd_reg(const From &from, isize offset) {
+		auto simd_data_proxy(const From &from, usize offset) {
 			if constexpr (is_array_v<From>) return from.data + offset;
 			else return from;
 		}
 	}
 
-	template <typename Fn, typename Scalar, isize Size, typename ... Froms>
-	requires
-		simdable<Scalar>
-		&& (true && ... && is_broadcastable_from_v<Froms, array<Scalar, Size>>)
-	void map(Fn fn, array<Scalar, Size> &to, Froms ... froms)
+	template <typename Fn, typename To, typename ... Froms>
+	void map(Fn fn, To &to, Froms ... froms)
 	{
-		for (isize i = 0; i < Size / avx_stride<Scalar>; ++i) {
-			avx_reg<Scalar> mto(to.data + i * avx_stride<Scalar>);
-			fn(mto, avx_reg<Scalar>(detail::load_simd_reg(froms, i * avx_stride<Scalar>))...);
-			mto.storeu(to.data + i * avx_stride<Scalar>);
-		}
+		if constexpr (is_array_v<To>) {
+			// nested array, or non-simd-able 1D array
+			if constexpr (array_depth_v<To> > 1 || !simdable<array_element_t<To>>) {
+				for (usize i = 0; i < array_size_v<To>; ++i)
+					map(fn, to[i], detail::subscript_proxy<To>(froms, i)...);
+			}
+			// simd-able 1D array
+			else {
+				constexpr usize Size = array_size_v<To>;
+				using Prim = array_element_t<To>;
+				static_assert(avx_stride<Prim> == 2 * sse_stride<Prim>);
 
-		static_assert(avx_stride<Scalar> == 2 * sse_stride<Scalar>);
-		for (isize i = 2 * (Size / avx_stride<Scalar>); i < Size / sse_stride<Scalar>; ++i) {
-			sse_reg<Scalar> mto(to.data + i * sse_stride<Scalar>);
-			fn(mto, sse_reg<Scalar>(detail::load_simd_reg(froms, i * sse_stride<Scalar>))...);
-			mto.storeu(to.data + i * sse_stride<Scalar>);
-		}
+				for (usize i = 0; i < Size / avx_stride<Prim>; ++i) {
+					avx_reg<Prim> mto(to.data + i * avx_stride<Prim>);
+					fn(mto, avx_reg<Prim>(detail::simd_data_proxy(froms, i * avx_stride<Prim>))...);
+					mto.storeu(to.data + i * avx_stride<Prim>);
+				}
+				
+				for (usize i = 2 * (Size / avx_stride<Prim>); i < Size / sse_stride<Prim>; ++i) {
+					sse_reg<Prim> mto(to.data + i * sse_stride<Prim>);
+					fn(mto, sse_reg<Prim>(detail::simd_data_proxy(froms, i * sse_stride<Prim>))...);
+					mto.storeu(to.data + i * sse_stride<Prim>);
+				}
 
-		for (isize i = sse_stride<Scalar> * (Size / sse_stride<Scalar>); i < Size; ++i) {
-			fn(to[i], detail::load_wrt<array<Scalar, Size>>(froms, i)...);
+				for (usize i = sse_stride<Prim> * (Size / sse_stride<Prim>); i < Size; ++i) {
+					fn(to[i], detail::subscript_proxy<array<Prim, Size>>(froms, i)...);
+				}
+			}
 		}
-	}
-
-	template <typename Fn, typename ToElem, isize ToSize, typename ... Froms>
-	requires
-		(is_array_v<ToElem> || (!simdable<ToElem>))		// an array, of arrays or non-simd-able primitives
-		&& (true && ... && is_broadcastable_from_v<Froms, array<ToElem, ToSize>>)
-	void map(Fn fn, array<ToElem, ToSize> &to, Froms ... froms)
-	{
-		for (isize i = 0; i < ToSize; ++i)
-			map<Fn>(fn, to[i], detail::load_wrt<array<ToElem, ToSize>, Froms>(froms, i)...);
+		else {
+			// scalar
+			fn(to, froms...);
+		}
 	}
 
 
@@ -298,7 +296,7 @@ namespace waffle
 
 	// array
 
-	template <typename T, isize S>
+	template <typename T, usize S>
 	struct array
 	{
 		
@@ -437,8 +435,8 @@ namespace waffle
 
 		/* data access */
 
-		T & operator[](isize i) { assert(i < S); return data[i]; }
-		const T & operator[](isize i) const { assert(i < S); return data[i]; }
+		T & operator[](usize i) { assert(i < S); return data[i]; }
+		const T & operator[](usize i) const { assert(i < S); return data[i]; }
 
 
 		/* output */
@@ -447,7 +445,7 @@ namespace waffle
 			// dim 1: [ ___ ,\t ___ ,\t ___ ]
 			// dim n: [ ___ ,\n ___ ,\n ___ ]
 			os << "[" << A[0];
-			for (isize i = 1; i < S; ++i) os << ',' << (array_depth_v<array> == 1 ? '\t' : '\n') << A[i];
+			for (usize i = 1; i < S; ++i) os << ',' << (array_depth_v<array> == 1 ? '\t' : '\n') << A[i];
 			os << "]";
 			return os;
 		}
