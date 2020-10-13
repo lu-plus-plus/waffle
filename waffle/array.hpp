@@ -235,39 +235,59 @@ namespace waffle
 
 	/* reduce, for horizontal operations */
 
-	template <typename Dest, typename Src, typename Fn>
-	requires is_broadcastable_from_v<Dest, Src>
-	void reduce(Dest &dest, const Src &src, Fn fn)
+	template <arrayname Src, broadcastable_to<Src> Dest, typename Fn>
+	void reduce_inplace(const Src &src, Dest &dest, Fn fn)
 	{
-		if constexpr (!is_array_v<Src>) {
-			fn(dest, src);
-		}
-		else if constexpr ((simdable<array_primitive_t<Src>> && array_depth_v<Src> == 1 && std::is_same_v<Dest, Src>)) {
-			fn(dest, src);
+		if constexpr (array_depth_v<Src> == 1) {
+			if constexpr (is_array_v<Dest>)
+				fn(dest, src);
+			else
+				for (usize i = 0; i < array_size_v<Src>; ++i) fn(dest, src[i]);
 		}
 		else {
-			if constexpr (is_tightly_broadcastable_from_v<Dest, Src>) {
-				for (usize i = 0; i < array_size_v<Src>; ++i) reduce(dest[i], src[i], fn);
-			}
-			else {
-				for (usize i = 0; i < array_size_v<Src>; ++i) reduce(dest, src[i], fn);
-			}
+			if constexpr (is_tightly_broadcastable_from_v<Dest, Src>)
+				for (usize i = 0; i < array_size_v<Src>; ++i) reduce_inplace(src[i], dest[i], fn);
+			else
+				for (usize i = 0; i < array_size_v<Src>; ++i) reduce_inplace(src[i], dest, fn);
 		}
 	}
 
-	// commonly used horizontal operations
-
-	template <typename Src, typename Fn>
-	auto reduce(const array_primitive_t<Src> &init, const Src &src, Fn fn)
+	template <arrayname Src, broadcastable_to<Src> Dest, typename Fn>
+	Dest reduce(const Src &src, const Dest &init, Fn fn)
 	{
-		if constexpr (is_array_v<Src>) {
-			array_primitive_t<Src> prim(init);
-			reduce(prim, src, fn);
-			return prim;
-		}
-		else {
-			return src;
-		}
+		Dest dest(init);
+		reduce_inplace(src, dest, fn);
+		return dest;
+	}
+
+
+
+	/* commonly used horizontal operations */
+
+	namespace inplace {
+		struct plus {
+			template <typename T>
+			void operator()(T &dest, const T &src) { dest += src; }
+		};
+	}
+
+	template <arrayname Src, broadcastable_to<Src> Dest>
+	void sum_inplace(const Src &src, Dest &dest)
+	{
+		reduce_inplace(src, dest, inplace::plus());
+	}
+
+	template <arrayname Src, broadcastable_to<Src> Dest>
+	Dest sum(const Src &src, const Dest &init)
+	{
+		return reduce(src, init, inplace::plus());
+	}
+
+	template <arrayname Src>
+	requires requires { array_primitive_t<Src>(0); }
+	array_primitive_t<Src> sum(const Src &src)
+	{
+		return sum(src, array_primitive_t<Src>(0));
 	}
 
 	

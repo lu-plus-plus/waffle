@@ -9,15 +9,10 @@
 
 int main(void)
 {
-	waffle::ndarray<float, 13, 2, 2> a(5.f);
-	waffle::ndarray<float, 13> b(1.f);
-	auto c = b / a;
-	std::cout << c << std::endl;
+	waffle::ndarray<float, 13, 2> A(5.f);
+	waffle::ndarray<float, 13> Ainit(5.f);
+	std::cout << waffle::sum(A, Ainit) << std::endl;
 
-	waffle::ndarray<float, 13> d(0.f);
-	auto my_plus = [] <typename T> (T & dest, const T & src) { dest += src; };
-	waffle::reduce(d, c, my_plus);
-	std::cout << d << std::endl;
-
-	std::cout << waffle::reduce(0.f, d, my_plus) << std::endl;
+	waffle::ndarray<waffle::scalar<float>, 13, 2> B(waffle::scalar<float>(10.f));
+	std::cout << waffle::sum(B, waffle::scalar<float>(5.f)) << std::endl;
 }
