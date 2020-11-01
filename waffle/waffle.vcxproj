@@ -146,6 +146,7 @@
     <ClInclude Include="adjoint.hpp" />
     <ClInclude Include="arithmetics.hpp" />
     <ClInclude Include="array.hpp" />
+    <ClInclude Include="derived_vector.hpp" />
     <ClInclude Include="dynamic.hpp" />
     <ClInclude Include="intrinsics.hpp" />
     <ClInclude Include="matrix.hpp" />

@@ -36,6 +36,9 @@
     <ClInclude Include="dynamic.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="derived_vector.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="waffle.cpp">
