@@ -24,12 +24,32 @@ int main(void)
 		waffle::adjoint<float> a(2.f);
 		waffle::adjoint<float> b(3.f);
 		auto c = a * b;
-		c.grad() = 4.f;
+		auto d = c * c;
 
-		c.backward();
+		d.grad() = 10.f;
+		d.backward();
 		
-		std::cout << "grad A = " << a.grad() << std::endl;
-		std::cout << "grad B = " << b.grad() << std::endl;
+		std::cout << "backward:" << std::endl;
+		std::cout << "a' = " << a.grad() << std::endl;
+		std::cout << "b' = " << b.grad() << std::endl;
+		std::cout << "c' = " << c.grad() << std::endl;
+		std::cout << std::endl;
+	}
+
+	{
+		waffle::adjoint<float> a(2.f);
+		waffle::adjoint<float> b(3.f);
+		auto c = a * b;
+		auto d = c * c;
+
+		a.grad() = 10.f;
+		a.forward();
+
+		std::cout << "forward:" << std::endl;
+		std::cout << "b' = " << b.grad() << std::endl;
+		std::cout << "c' = " << c.grad() << std::endl;
+		std::cout << "d' = " << d.grad() << std::endl;
+		std::cout << std::endl;
 	}
 	
 }
