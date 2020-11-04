@@ -58,7 +58,21 @@ namespace waffle {
 
 		void storeu(float dest[4]) { _mm_storeu_ps(dest, raw); }
 
-		float operator[](int i) const { assert(i < 4); return raw.m128_f32[i]; }
+		float operator[](int i) const {
+			switch (i) {
+				case 0:
+					return _mm_cvtss_f32(raw);
+				case 1:
+					return _mm_cvtss_f32(_mm_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 1)));
+				case 2:
+					return _mm_cvtss_f32(_mm_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 2)));
+				case 3:
+					return _mm_cvtss_f32(_mm_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 3)));
+				default:
+					throw std::out_of_range("mregf<4> subscript");
+					break;
+			}
+		}
 
 
 		/* (explicit) type casting between register types */
@@ -162,7 +176,41 @@ namespace waffle {
 
 		void storeu(float dest[4]) { _mm256_storeu_ps(dest, raw); }
 
-		float operator[](int i) const { assert(i < 8); return raw.m256_f32[i]; }
+		float operator[](int i) const {
+			assert(i < 8);
+			switch (i) {
+				case 0:
+					return _mm256_cvtss_f32(raw);
+				case 1:
+					return _mm256_cvtss_f32(_mm256_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 1)));	
+				case 2:
+					return _mm256_cvtss_f32(_mm256_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 2)));	
+				case 3:
+					return _mm256_cvtss_f32(_mm256_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 3)));
+				case 4:
+					return _mm256_cvtss_f32(_mm256_castsi256_ps(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001))
+					);
+				case 5:
+					return _mm256_cvtss_f32(_mm256_permute_ps(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						_MM_SHUFFLE(0, 0, 0, 1)
+					));
+				case 6:
+					return _mm256_cvtss_f32(_mm256_permute_ps(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						_MM_SHUFFLE(0, 0, 0, 2)
+					));
+				case 7:
+					return _mm256_cvtss_f32(_mm256_permute_ps(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						_MM_SHUFFLE(0, 0, 0, 3)
+					));
+				default:
+					throw std::out_of_range("mregf<8> subscript");
+					break;
+			}
+		}
 
 
 		/* (explicit) type casting between register types */
@@ -267,7 +315,21 @@ namespace waffle {
 
 		void storeu(int dest[4]) { _mm_storeu_si128((__m128i *)dest, raw); }
 
-		int operator[](int i) const { assert(i < 4); return raw.m128i_i32[i]; }
+		int operator[](int i) const {
+			switch (i) {
+				case 0:
+					return _mm_cvtsi128_si32(raw);
+				case 1:
+					return _mm_cvtsi128_si32(_mm_shuffle_epi32(raw, _MM_SHUFFLE(0, 0, 0, 1)));
+				case 2:
+					return _mm_cvtsi128_si32(_mm_shuffle_epi32(raw, _MM_SHUFFLE(0, 0, 0, 2)));
+				case 3:
+					return _mm_cvtsi128_si32(_mm_shuffle_epi32(raw, _MM_SHUFFLE(0, 0, 0, 3)));
+				default:
+					throw std::out_of_range("mregi32<4> subscript");
+					break;
+			}
+		}
 
 
 		/* (explicit) type casting between register types */
@@ -281,12 +343,14 @@ namespace waffle {
 		mregi32 & operator+=(const mregi32 &rhs) { raw = _mm_add_epi32(raw, rhs.raw); return *this; }
 		mregi32 & operator-=(const mregi32 &rhs) { raw = _mm_sub_epi32(raw, rhs.raw); return *this; }
 		mregi32 & operator*=(const mregi32 &rhs) { raw = _mm_mul_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator/=(const mregi32 &rhs) { raw = _mm_div_epi32(raw, rhs.raw); return *this; }
+		// TODO: signed int division with approximation
+		// https://github.com/vectorclass/version2/blob/master/vectori128.h
+		// mregi32 & operator/=(const mregi32 &rhs) { raw = _mm_div_epi32(raw, rhs.raw); return *this; }
 
 		friend mregi32 operator+(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) += rhs; }
 		friend mregi32 operator-(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) -= rhs; }
 		friend mregi32 operator*(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) *= rhs; }
-		friend mregi32 operator/(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) /= rhs; }
+		// friend mregi32 operator/(const mregi32 &lhs, const mregi32 &rhs) { return mregi32(lhs) /= rhs; }
 
 		friend mregi32 abs(const mregi32 &a) { return _mm_abs_epi32(a); };
 
@@ -371,7 +435,42 @@ namespace waffle {
 
 		void storeu(int dest[8]) { _mm256_storeu_si256((__m256i *)dest, raw); }
 
-		int operator[](int i) const { assert(i < 8); return raw.m256i_i32[i]; }
+		int operator[](int i) const {
+			auto mm256_cvtsi256_si32 = [] (__m256i m) -> int {
+				return _mm_cvtsi128_si32(_mm256_castsi256_si128(m));
+			};
+
+			switch (i) {
+				case 0:
+					return mm256_cvtsi256_si32(raw);
+				case 1:
+					return mm256_cvtsi256_si32(_mm256_shuffle_epi32(raw, _MM_SHUFFLE(0, 0, 0, 1)));
+				case 2:
+					return mm256_cvtsi256_si32(_mm256_shuffle_epi32(raw, _MM_SHUFFLE(0, 0, 0, 2)));
+				case 3:
+					return mm256_cvtsi256_si32(_mm256_shuffle_epi32(raw, _MM_SHUFFLE(0, 0, 0, 3)));
+				case 4:
+					return mm256_cvtsi256_si32(_mm256_permute2x128_si256(raw, raw, 0b1001'0001));
+				case 5:
+					return mm256_cvtsi256_si32(_mm256_shuffle_epi32(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						_MM_SHUFFLE(0, 0, 0, 1)
+					));
+				case 6:
+					return mm256_cvtsi256_si32(_mm256_shuffle_epi32(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						_MM_SHUFFLE(0, 0, 0, 2)
+					));
+				case 7:
+					return mm256_cvtsi256_si32(_mm256_shuffle_epi32(
+						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						_MM_SHUFFLE(0, 0, 0, 3)
+					));
+				default:
+					throw std::out_of_range("mregi32<8> subscript");
+					break;
+			}
+		}
 
 
 		/* (explicit) type casting between register types */
@@ -385,12 +484,14 @@ namespace waffle {
 		mregi32 & operator+=(const mregi32 & rhs) { raw = _mm256_add_epi32(raw, rhs.raw); return *this; }
 		mregi32 & operator-=(const mregi32 & rhs) { raw = _mm256_sub_epi32(raw, rhs.raw); return *this; }
 		mregi32 & operator*=(const mregi32 & rhs) { raw = _mm256_mul_epi32(raw, rhs.raw); return *this; }
-		mregi32 & operator/=(const mregi32 & rhs) { raw = _mm256_div_epi32(raw, rhs.raw); return *this; }
+		// TODO: signed int division with approximation
+		// https://github.com/vectorclass/version2/blob/master/vectori128.h
+		// mregi32 & operator/=(const mregi32 & rhs) { raw = _mm256_div_epi32(raw, rhs.raw); return *this; }
 
 		friend mregi32 operator+(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) += rhs; }
 		friend mregi32 operator-(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) -= rhs; }
 		friend mregi32 operator*(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) *= rhs; }
-		friend mregi32 operator/(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) /= rhs; }
+		// friend mregi32 operator/(const mregi32 & lhs, const mregi32 & rhs) { return mregi32(lhs) /= rhs; }
 
 		friend mregi32 abs(const mregi32 & a) { return _mm256_abs_epi32(a); };
 

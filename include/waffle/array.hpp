@@ -1,7 +1,7 @@
 #pragma once
 
 #include <type_traits>
-#include <concepts>
+// #include <concepts>
 
 #include <cassert>
 
@@ -320,14 +320,14 @@ namespace waffle
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
 		explicit array(const From &from) {
-			auto copy = [] <typename T> (T & a, const T & b) { a = b; };
+			auto copy = [] <typename P> (P & a, const P & b) { a = b; };
 			map(copy, *this, from);
 		}
 
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
 		array & operator=(const From &from) {
-			auto copy = [] <typename T> (T & a, const T & b) { a = b; };
+			auto copy = [] <typename P> (P & a, const P & b) { a = b; };
 			map(copy, *this, from);
 		}
 
@@ -338,14 +338,14 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator+=(const From &from) {
-			auto add_assign = [] <typename T> (T & a, const T & b) { a += b; };
+			auto add_assign = [] <typename P> (P & a, const P & b) { a += b; };
 			map(add_assign, *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
 		friend array operator+(const From &from, const array &to) {
-			auto add_copy = [] <typename T> (T & a, const T & b, const T & c) { a = b + c; };
+			auto add_copy = [] <typename P> (P & a, const P & b, const P & c) { a = b + c; };
 			array result;
 			map(add_copy, result, from, to);
 			return result;
@@ -361,14 +361,14 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator-=(const From &from) {
-			auto binary_sub = [] <typename T> (T & a, const T & b) { a -= b; };
+			auto binary_sub = [] <typename P> (P & a, const P & b) { a -= b; };
 			map(binary_sub, *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
 		friend array operator-(const From &from, const array &to) {
-			auto ternary_sub = [] <typename T> (T & a, const T & b, const T & c) { a = b - c; };
+			auto ternary_sub = [] <typename P> (P & a, const P & b, const P & c) { a = b - c; };
 			array result;
 			map(ternary_sub, result, from, to);
 			return result;
@@ -377,7 +377,7 @@ namespace waffle
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
 		friend array operator-(const array &to, const From &from) {
-			auto ternary_sub = [] <typename T> (T & a, const T & b, const T & c) { a = b - c; };
+			auto ternary_sub = [] <typename P> (P & a, const P & b, const P & c) { a = b - c; };
 			array result;
 			map(ternary_sub, result, to, from);
 			return result;
@@ -387,14 +387,14 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator*=(const From &from) {
-			auto binary_mul = [] <typename T> (T & a, const T & b) { a *= b; };
+			auto binary_mul = [] <typename P> (P & a, const P & b) { a *= b; };
 			map(binary_mul, *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
 		friend array operator*(const From &from, const array &to) {
-			auto ternary_mul = [] <typename T> (T & a, const T & b, const T & c) { a = b * c; };
+			auto ternary_mul = [] <typename P> (P & a, const P & b, const P & c) { a = b * c; };
 			array result;
 			map(ternary_mul, result, from, to);
 			return result;
@@ -410,14 +410,14 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator/=(const From &from) {
-			auto binary_div = [] <typename T> (T & a, const T & b) { a /= b; };
+			auto binary_div = [] <typename P> (P & a, const P & b) { a /= b; };
 			map(binary_div, *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
 		friend array operator/(const From &from, const array &to) {
-			auto ternary_div = [] <typename T> (T & a, const T & b, const T & c) { a = b / c; };
+			auto ternary_div = [] <typename P> (P & a, const P & b, const P & c) { a = b / c; };
 			array result;
 			map(ternary_div, result, from, to);
 			return result;
@@ -426,7 +426,7 @@ namespace waffle
 		template <broadcastable_to<array> From>
 		requires (!std::is_same_v<From, array>)
 		friend array operator/(const array &to, const From &from) {
-			auto ternary_div = [] <typename T> (T & a, const T & b, const T & c) { a = b / c; };
+			auto ternary_div = [] <typename P> (P & a, const P & b, const P & c) { a = b / c; };
 			array result;
 			map(ternary_div, result, to, from);
 			return result;

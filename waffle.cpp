@@ -1,11 +1,11 @@
 
 #include <iostream>
 
-#include "array.hpp"
+#include "waffle/array.hpp"
 
-#include "derived_vector.hpp"
+#include "waffle/derived_vector.hpp"
 
-#include "adjoint.hpp"
+#include "waffle/adjoint.hpp"
 
 
 
