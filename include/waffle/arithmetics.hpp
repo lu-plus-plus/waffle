@@ -5,8 +5,8 @@
 namespace waffle
 {
 
-	using isize = std::int32_t;
-	using usize = std::uint32_t;
+	using isize = std::int64_t;
+	using usize = std::uint64_t;
 
 	using byte = std::uint8_t;
 

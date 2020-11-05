@@ -177,7 +177,12 @@ namespace waffle {
 		void storeu(float dest[4]) { _mm256_storeu_ps(dest, raw); }
 
 		float operator[](int i) const {
-			assert(i < 8);
+			auto mm256_permute2x128_ps = [] (__m256 m) -> __m256 {
+				__m256i mi = _mm256_castps_si256(m);
+				__m256i perm_mi = _mm256_permute2x128_si256(mi, mi, 0b1001'0001);
+				return _mm256_castsi256_ps(perm_mi);
+			};
+			
 			switch (i) {
 				case 0:
 					return _mm256_cvtss_f32(raw);
@@ -188,22 +193,20 @@ namespace waffle {
 				case 3:
 					return _mm256_cvtss_f32(_mm256_permute_ps(raw, _MM_SHUFFLE(0, 0, 0, 3)));
 				case 4:
-					return _mm256_cvtss_f32(_mm256_castsi256_ps(
-						_mm256_permute2x128_si256(raw, raw, 0b1001'0001))
-					);
+					return _mm256_cvtss_f32(mm256_permute2x128_ps(raw));
 				case 5:
 					return _mm256_cvtss_f32(_mm256_permute_ps(
-						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						mm256_permute2x128_ps(raw),
 						_MM_SHUFFLE(0, 0, 0, 1)
 					));
 				case 6:
 					return _mm256_cvtss_f32(_mm256_permute_ps(
-						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						mm256_permute2x128_ps(raw),
 						_MM_SHUFFLE(0, 0, 0, 2)
 					));
 				case 7:
 					return _mm256_cvtss_f32(_mm256_permute_ps(
-						_mm256_permute2x128_si256(raw, raw, 0b1001'0001),
+						mm256_permute2x128_ps(raw),
 						_MM_SHUFFLE(0, 0, 0, 3)
 					));
 				default:
