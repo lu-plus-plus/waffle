@@ -5,7 +5,7 @@ project(waffle VERSION 0.1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_executable(waffle waffle.cpp)
+add_executable(waffle src/waffle.cpp)
 
 target_include_directories(
     waffle PUBLIC
