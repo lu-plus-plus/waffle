@@ -1,14 +1,16 @@
 #pragma once
 
 #include <type_traits>
-// #include <concepts>
+#include <utility>
 
 #include <cassert>
 
 #include <iostream>
+#include <sstream>
 
 #include "arithmetics.hpp"
 #include "intrinsics.hpp"
+#include "utils.hpp"
 
 
 
@@ -19,37 +21,21 @@ namespace waffle
 
 
 
-	// array
+	//	array
 
 	template <typename T, usize S>
 	struct array;
 
 
 
-	// ndarray
-
-	namespace detail {
-		template <typename T, usize ... Dims>
-		struct ndarray_helper;
-
-		template <typename T, usize InnerDim, usize ... Dims>
-		struct ndarray_helper<T, InnerDim, Dims...> {
-			using type = typename ndarray_helper<array<T, InnerDim>, Dims...>::type;
-		};
-
-		template <typename T, usize OutestDim>
-		struct ndarray_helper<T, OutestDim> {
-			using type = array<T, OutestDim>;
-		};
-	}
+	//	ndarray
 
 	template <typename T, usize ... Dims>
-	requires (sizeof...(Dims) > 0)
-	using ndarray = typename detail::ndarray_helper<T, Dims...>::type;
+	using ndarray = left_fold_t<array, T, Dims...>;
 
 
 
-	// type traits of _array_
+	//	type trait: is it an array?
 
 	template <typename InstType>
 	struct is_array : std::false_type {};
@@ -65,7 +51,7 @@ namespace waffle
 
 
 
-	template <arrayname T>
+	template <typename T>
 	struct unwrap_array;
 
 	namespace detail {
@@ -82,6 +68,12 @@ namespace waffle
 		};
 	}
 
+	template <typename T>
+	struct unwrap_array {
+		using primitive = T;
+		static constexpr usize depth = 0;
+	};
+
 	template <typename T, usize S>
 	struct unwrap_array<array<T, S>> {
 		using element = T;
@@ -96,10 +88,10 @@ namespace waffle
 	template <arrayname T>
 	inline constexpr usize array_size_v = unwrap_array<T>::size;
 
-	template <arrayname T>
+	template <typename T>
 	using array_primitive_t = typename unwrap_array<T>::primitive;
 
-	template <arrayname T>
+	template <typename T>
 	inline constexpr usize array_depth_v = unwrap_array<T>::depth;
 
 
@@ -172,59 +164,117 @@ namespace waffle
 
 
 
-	// map, for loop fusion
+	template <typename From, typename To>
+	inline constexpr bool is_properly_broadcastable_from_v = is_broadcastable_from_v<From, To> && (!std::is_same_v<From, To>);
 
-	template <typename Fn, typename To, typename ... Froms>
-	void map(Fn fn, To &to, Froms ... froms);
+	template <typename From, typename To>
+	concept properly_broadcastable_to = is_properly_broadcastable_from_v<From, To>;
+
+
+
+	/*
+		When T is NOT an waffle::ndarray, replace_primitive<T, P> returns P.
+		When T == ndarray<sth, Dims...>, replace_primitive<T, NewP> returns ndarray<P, Dims...>
+	*/
+	template <typename T, typename NewPrim>
+	struct replace_primitive;
 
 	namespace detail {
-		template <typename To, typename From>
-		auto subscript_proxy(const From &from, usize i) {
-			if constexpr (is_tightly_broadcastable_from_v<From, To>) return from[i];
-			else return from;
-		}
+		template <typename T, typename NewPrim>
+		struct replace_primitive_helper {
+			using type = NewPrim;
+		};
 
-		template <typename From>
-		auto simd_data_proxy(const From &from, usize offset) {
-			if constexpr (is_array_v<From>) return from.data + offset;
-			else return from;
-		}
+		template <typename Elem, usize Size, typename NewPrim>
+		struct replace_primitive_helper<array<Elem, Size>, NewPrim> {
+			using type = array<typename replace_primitive_helper<Elem, NewPrim>::type, Size>;
+		};
 	}
 
-	template <typename Fn, typename To, typename ... Froms>
-	void map(Fn fn, To &to, Froms ... froms)
-	{
-		if constexpr (is_array_v<To>) {
-			// nested array, or non-simd-able 1D array
-			if constexpr (array_depth_v<To> > 1 || !simdable<array_element_t<To>>) {
-				for (usize i = 0; i < array_size_v<To>; ++i)
-					map(fn, to[i], detail::subscript_proxy<To>(froms, i)...);
-			}
-			// simd-able 1D array
-			else {
-				constexpr usize Size = array_size_v<To>;
-				using Prim = array_element_t<To>;
-				static_assert(avx_stride<Prim> == 2 * sse_stride<Prim>);
+	template <typename T, typename NewPrim>
+	struct replace_primitive {
+		using type = typename detail::replace_primitive_helper<T, NewPrim>::type;
+	};
 
-				for (usize i = 0; i < Size / avx_stride<Prim>; ++i) {
-					avx_reg<Prim> mto(to.data + i * avx_stride<Prim>);
-					fn(mto, avx_reg<Prim>(detail::simd_data_proxy(froms, i * avx_stride<Prim>))...);
-					mto.storeu(to.data + i * avx_stride<Prim>);
+	template <typename T, typename NewPrim>
+	using replace_primitive_t = typename replace_primitive<T, NewPrim>::type;
+
+
+
+	/* map, for loop fusion */
+
+	template <typename Fn, typename To, typename ... Froms>
+	requires valid_arguments_to<Fn, array_primitive_t<To>, array_primitive_t<Froms>...>
+	// at least, the fallback (scalar) mode should be supported
+	void map(Fn fn, To &to, const Froms & ... froms)
+	{
+		auto load_element = [] <typename From> (const From & from, usize i) {
+			if constexpr (is_tightly_broadcastable_from_v<replace_primitive_t<From, void *>, replace_primitive_t<To, void *>>)
+				return from[i];
+			else
+				return from;
+		};
+
+		auto load_packet = [] <typename From> (const From & from, usize offset) {
+			if constexpr (is_array_v<From>) return from.data + offset;
+			else return from;
+		};
+
+		if constexpr (is_array_v<To>) {
+			// To:		nested array, or non-simd-able 1D array,
+			// Froms:	some of them have non-simd-able primitives
+			if constexpr (array_depth_v<To> > 1 || !(simdable<array_element_t<To>> && (simdable<array_primitive_t<Froms>> && ...))) {
+				for (usize i = 0; i < array_size_v<To>; ++i)
+					map(fn, to[i], load_element(froms, i)...);
+			}
+			// To:		simd-able 1D array
+			// Froms:	all have simd-able primitives
+			// However, at here we are still not sure whether Fn takes (simd_reg<To's prim>, simd_reg<Froms' prims>...)
+			else {
+				constexpr usize ToSize = array_size_v<To>;
+				using ToPrim = array_element_t<To>;
+
+				// test whether Fn is invocable in the SIMD way
+				constexpr bool avxable = valid_arguments_to<Fn, avx_reg<ToPrim>, avx_reg<array_primitive_t<Froms>>...>;
+				constexpr bool sseable = valid_arguments_to<Fn, sse_reg<ToPrim>, sse_reg<array_primitive_t<Froms>>...>;
+
+				constexpr usize avx_begin = 0;
+				constexpr usize avx_end = avxable ? (ToSize / avx_stride<ToPrim>) : avx_begin;
+
+				constexpr usize sse_begin = avxable ? ((ToSize / avx_stride<ToPrim>) << 1) : 0;
+				constexpr usize sse_end = sseable ? (ToSize / sse_stride<ToPrim>) : sse_begin;
+
+				constexpr usize fallback_begin = (avxable | sseable)
+					? (sseable
+						? (sse_stride<ToPrim> * (ToSize / sse_stride<ToPrim>))
+						: (avx_stride<ToPrim> *(ToSize / avx_stride<ToPrim>)))
+					: 0;
+				constexpr usize fallback_end = ToSize;
+
+				if (avx_begin != avx_end || sse_begin != sse_end)
+					std::cout << "vector mode" << std::endl;
+
+				for (usize i = avx_begin; i < avx_end; ++i) {
+					avx_reg<ToPrim> mto(to.data + i * avx_stride<ToPrim>);
+					fn(mto, avx_reg<array_primitive_t<Froms>>(load_packet(froms, i * avx_stride<array_primitive_t<Froms>>))...);
+					mto.storeu(to.data + i * avx_stride<ToPrim>);
 				}
 				
-				for (usize i = 2 * (Size / avx_stride<Prim>); i < Size / sse_stride<Prim>; ++i) {
-					sse_reg<Prim> mto(to.data + i * sse_stride<Prim>);
-					fn(mto, sse_reg<Prim>(detail::simd_data_proxy(froms, i * sse_stride<Prim>))...);
-					mto.storeu(to.data + i * sse_stride<Prim>);
+				for (usize i = sse_begin; i < sse_end; ++i) {
+					sse_reg<ToPrim> mto(to.data + i * sse_stride<ToPrim>);
+					fn(mto, sse_reg<array_primitive_t<Froms>>(load_packet(froms, i * sse_stride<array_primitive_t<Froms>>))...);
+					mto.storeu(to.data + i * sse_stride<ToPrim>);
 				}
 
-				for (usize i = sse_stride<Prim> * (Size / sse_stride<Prim>); i < Size; ++i) {
-					fn(to[i], detail::subscript_proxy<array<Prim, Size>>(froms, i)...);
+				for (usize i = fallback_begin; i < fallback_end; ++i) {
+					fn(to[i], load_element(froms, i)...);
 				}
 			}
 		}
 		else {
-			// scalar
+			// To:		scalar
+			// Froms:	scalars
+			std::cout << "scalar mode" << std::endl;
 			fn(to, froms...);
 		}
 	}
@@ -262,23 +312,126 @@ namespace waffle
 
 	/* commonly used horizontal operations */
 
-	namespace inplace {
+	namespace functional::in_place {
+
 		struct plus {
 			template <typename T>
+			requires requires (T t) { t += t; }
 			void operator()(T &dest, const T &src) { dest += src; }
 		};
+
+		struct minus {
+			template <typename T>
+			requires requires (T t) { t -= t; }
+			void operator()(T &dest, const T &src) { dest -= src; }
+		};
+
+		struct multiplies {
+			template <typename T>
+			requires requires (T t) { t *= t; }
+			void operator()(T &dest, const T &src) { dest *= src; }
+		};
+
+		struct divides {
+			template <typename T>
+			requires requires (T t) { t /= t; }
+			void operator()(T &dest, const T &src) { dest /= src; }
+		};
+
+		struct modulus {
+			template <typename T>
+			requires requires (T t) { t %= t; }
+			void operator()(T &dest, const T &src) { dest %= src; }
+		};
+
 	}
+
+	namespace functional {
+		
+		struct copy {
+			template <typename T>
+			T operator()(const T &src) { return src; }
+
+			template <typename T>
+			void operator()(T &dest, const T &src) { dest = src; }
+		};
+
+		struct plus {
+			template <typename T>
+			requires requires (T t) { t + t; }
+			T operator()(const T &lhs, const T &rhs) { return lhs + rhs; }
+
+			template <typename T>
+			requires requires (T t) { t = t + t; }
+			void operator()(T &dest, const T &lhs, const T &rhs) { dest = lhs + rhs; }
+		};
+
+		struct minus {
+			template <typename T>
+			requires requires (T t) { t - t; }
+			T operator()(const T &lhs, const T &rhs) { return lhs - rhs; }
+
+			template <typename T>
+			requires requires (T t) { t = t - t; }
+			void operator()(T &dest, const T &lhs, const T &rhs) { dest = lhs - rhs; }
+		};
+
+		struct multiplies {
+			template <typename T>
+			requires requires (T t) { t * t; }
+			T operator()(const T &lhs, const T &rhs) { return lhs * rhs; }
+
+			template <typename T>
+			requires requires (T t) { t = t * t; }
+			void operator()(T &dest, const T &lhs, const T &rhs) { dest = lhs * rhs; }
+		};
+
+		struct divides {
+			template <typename T>
+			requires requires (T t) { t / t; }
+			T operator()(const T &lhs, const T &rhs) { return lhs / rhs; }
+
+			template <typename T>
+			requires requires (T t) { t = t / t; }
+			void operator()(T &dest, const T &lhs, const T &rhs) { dest = lhs / rhs; }
+		};
+
+		struct modulus {
+			template <typename T>
+			requires requires (T t) { t % t; }
+			T operator()(const T &lhs, const T &rhs) { return lhs % rhs; }
+
+			template <typename T>
+			requires requires (T t) { t = t % t; }
+			void operator()(T &dest, const T &lhs, const T &rhs) { dest = lhs % rhs; }
+		};
+
+		struct equal_to {
+			template <typename S>
+			requires requires (S s) { s == s; }
+			auto operator()(const S &lhs, const S &rhs) { return lhs == rhs; }
+
+			template <typename D, typename S>
+			requires requires (D dest, S src) { dest = src == src; }
+			void operator()(D &dest, const S &lhs, const S &rhs) { dest = lhs == rhs; }
+		};
+
+	}
+
+
+
+	// sum
 
 	template <arrayname Src, broadcastable_to<Src> Dest>
 	void sum_inplace(const Src &src, Dest &dest)
 	{
-		reduce_inplace(src, dest, inplace::plus());
+		reduce_inplace(src, dest, functional::in_place::plus());
 	}
 
 	template <arrayname Src, broadcastable_to<Src> Dest>
 	Dest sum(const Src &src, const Dest &init)
 	{
-		return reduce(src, init, inplace::plus());
+		return reduce(src, init, functional::in_place::plus());
 	}
 
 	template <arrayname Src>
@@ -286,6 +439,27 @@ namespace waffle
 	array_primitive_t<Src> sum(const Src &src)
 	{
 		return sum(src, array_primitive_t<Src>(0));
+	}
+
+	// prod
+
+	template <arrayname Src, broadcastable_to<Src> Dest>
+	void prod_inplace(const Src &src, Dest &dest)
+	{
+		reduce_inplace(src, dest, functional::in_place::multiplies());
+	}
+
+	template <arrayname Src, broadcastable_to<Src> Dest>
+	Dest prod(const Src &src, const Dest &init)
+	{
+		return reduce(src, init, functional::in_place::multiplies());
+	}
+
+	template <arrayname Src>
+	requires requires { array_primitive_t<Src>(0); }
+	array_primitive_t<Src> prod(const Src &src)
+	{
+		return prod(src, array_primitive_t<Src>(0));
 	}
 
 	
@@ -315,44 +489,47 @@ namespace waffle
 		~array() = default;
 
 
+		/* primitive initializer list */
+
+		using prim_t = array_primitive_t<array<T, S>>;
+
+		array(std::initializer_list<prim_t> il) {
+			assert(il.size() <= S);
+			std::copy_n(il.begin(), std::min(il.size(), S * sizeof(T) / sizeof(prim_t)), data);
+		}
+
+
 		/* ctor / assignment when the argument is broadcastable to T */
 		
-		template <broadcastable_to<array> From>
-		requires (!std::is_same_v<From, array>)
+		template <properly_broadcastable_to<array> From>
 		explicit array(const From &from) {
-			auto copy = [] <typename P> (P & a, const P & b) { a = b; };
-			map(copy, *this, from);
+			map(functional::copy(), *this, from);
 		}
 
-		template <broadcastable_to<array> From>
-		requires (!std::is_same_v<From, array>)
+		template <properly_broadcastable_to<array> From>
 		array & operator=(const From &from) {
-			auto copy = [] <typename P> (P & a, const P & b) { a = b; };
-			map(copy, *this, from);
+			map(functional::copy(), *this, from);
 		}
 
 
-		/* binary operation */
+		/* arithmetic operation */
 
 		// add
 
 		template <broadcastable_to<array> From>
 		array & operator+=(const From &from) {
-			auto add_assign = [] <typename P> (P & a, const P & b) { a += b; };
-			map(add_assign, *this, from);
+			map(functional::in_place::plus(), *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
 		friend array operator+(const From &from, const array &to) {
-			auto add_copy = [] <typename P> (P & a, const P & b, const P & c) { a = b + c; };
 			array result;
-			map(add_copy, result, from, to);
+			map(functional::plus(), result, from, to);
 			return result;
 		}
 		
-		template <broadcastable_to<array> From>
-		requires (!std::is_same_v<From, array>)
+		template <properly_broadcastable_to<array> From>
 		friend array operator+(const array &to, const From &from) {
 			return from + to;
 		}
@@ -361,25 +538,14 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator-=(const From &from) {
-			auto binary_sub = [] <typename P> (P & a, const P & b) { a -= b; };
-			map(binary_sub, *this, from);
+			map(functional::in_place::minus(), *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
-		friend array operator-(const From &from, const array &to) {
-			auto ternary_sub = [] <typename P> (P & a, const P & b, const P & c) { a = b - c; };
-			array result;
-			map(ternary_sub, result, from, to);
-			return result;
-		}
-
-		template <broadcastable_to<array> From>
-		requires (!std::is_same_v<From, array>)
 		friend array operator-(const array &to, const From &from) {
-			auto ternary_sub = [] <typename P> (P & a, const P & b, const P & c) { a = b - c; };
 			array result;
-			map(ternary_sub, result, to, from);
+			map(functional::minus(), result, to, from);
 			return result;
 		}
 
@@ -387,21 +553,18 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator*=(const From &from) {
-			auto binary_mul = [] <typename P> (P & a, const P & b) { a *= b; };
-			map(binary_mul, *this, from);
+			map(functional::in_place::multiplies(), *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
 		friend array operator*(const From &from, const array &to) {
-			auto ternary_mul = [] <typename P> (P & a, const P & b, const P & c) { a = b * c; };
 			array result;
-			map(ternary_mul, result, from, to);
+			map(functional::multiplies(), result, from, to);
 			return result;
 		}
 
-		template <broadcastable_to<array> From>
-		requires (!std::is_same_v<From, array>)
+		template <properly_broadcastable_to<array> From>
 		friend array operator*(const array &to, const From &from) {
 			return from * to;
 		}
@@ -410,26 +573,30 @@ namespace waffle
 
 		template <broadcastable_to<array> From>
 		array & operator/=(const From &from) {
-			auto binary_div = [] <typename P> (P & a, const P & b) { a /= b; };
-			map(binary_div, *this, from);
+			map(functional::in_place::divides(), *this, from);
 			return *this;
 		}
 
 		template <broadcastable_to<array> From>
-		friend array operator/(const From &from, const array &to) {
-			auto ternary_div = [] <typename P> (P & a, const P & b, const P & c) { a = b / c; };
+		friend array operator/(const array &to, const From &from) {
 			array result;
-			map(ternary_div, result, from, to);
+			map(functional::divides(), result, to, from);
 			return result;
 		}
 
+
+		/* compare */
+
 		template <broadcastable_to<array> From>
-		requires (!std::is_same_v<From, array>)
-		friend array operator/(const array &to, const From &from) {
-			auto ternary_div = [] <typename P> (P & a, const P & b, const P & c) { a = b / c; };
-			array result;
-			map(ternary_div, result, to, from);
+		friend auto operator==(const From &from, const array &to) {
+			replace_primitive_t<array, bool> result;
+			map(functional::equal_to(), result, from, to);
 			return result;
+		}
+
+		template <properly_broadcastable_to<array> From>
+		friend auto operator==(const array &to, const From &from) {
+			return from == to;
 		}
 
 
@@ -450,6 +617,152 @@ namespace waffle
 			return os;
 		}
 
+
+		/* vectorization */
+
+		constexpr static usize packet_avx() requires simdable<T>;
+		constexpr static usize packet_sse() requires simdable<T>;
+
 	};
+
+
+
+	namespace slice
+	{
+
+		struct all_t {
+			explicit constexpr all_t(int) {}
+		};
+		
+		inline constexpr all_t all{ 0 };
+
+
+		struct end_t {
+			explicit constexpr end_t(int) {}
+		};
+		
+		inline constexpr end_t end{ 0 };
+
+		
+		struct mid_range_t {
+			const usize b, e;
+		private:
+			mid_range_t(usize b, usize e) : b(b), e(e) {}
+			friend mid_range_t range(usize begin, usize end);
+		};
+
+		mid_range_t range(usize begin, usize end) { return mid_range_t(begin, end); }
+
+
+		struct end_range_t {
+			usize b;
+		private:
+			end_range_t(usize b) : b(b) {}
+			friend end_range_t range(usize begin, end_t);
+		};
+
+		end_range_t range(usize begin, end_t) { assert(begin != 0); return end_range_t(begin); }
+
+
+		
+	}
+
+
+
+	template <typename T, usize ND>
+	struct varray
+	{
+	private:
+		array<usize, ND> siz;
+
+		T *raw;
+
+		static void copy_raw(varray &self, const varray &other) {
+			std::copy(self.raw, other.raw, prod(other.siz));
+		}
+
+		// remember to reset (*this) and std::forward the argument
+		static void move_raw(varray &self, varray &&other) {
+			delete[] self.raw;
+			self.raw = other.raw;
+			other.raw = nullptr;
+		}
+
+	public:
+
+		/* initializing */
+
+		varray(const array<usize, ND> &siz) : siz(siz), raw(new T[prod(siz)]) {}
+
+		varray(const array<usize, ND> &siz, const T &val) : varray(siz) {
+			std::fill(raw, raw + prod(siz), val);
+		}
+
+		varray(const varray &other) : siz(other.siz), raw(new T[prod(other.siz)]) {
+			copy_raw(*this, other);
+		}
+
+		varray(varray &&other) : siz(other.siz), raw(nullptr) {
+			move_raw(*this, std::forward<varray>(other));
+		}
+
+		~varray() { delete[] raw; }
+
+		struct unaligned_assignment : std::exception
+		{
+			std::string s;
+			array<usize, ND> a, b;
+
+			unaligned_assignment(const array<usize, ND> &a, const array<usize, ND> &b) : a(a), b(b), s() {
+				std::ostringstream oss;
+				oss << "assigning varray(" << b << ") to varray(" << a << ")";
+				s = oss.str();
+			}
+
+			virtual const char * what() const noexcept override {
+				return s.c_str();
+			}
+		};
+
+		//varray & operator=(const varray &other) {
+		//	if (siz != other.siz)	throw unaligned_assignment(siz, other.siz);
+		//	else					copy_raw(*this, other);
+		//}
+		//varray & operator=(varray &&other) {
+		//	if (siz != other.siz)	throw unaligned_assignment(siz, other.siz);
+		//	else					move_raw(*this, std::forward<varray>(other));
+		//}
+
+	};
+
+	//template <arrayname Array, usize OuterDim, usize ... Dims>
+	//struct static_view
+	//{
+	//	Array &arr;
+
+	//	using elem_t = array_element_t<Array>;
+	//	static_assert(OuterDim <= array_size_v<Array>);
+	//};
+
+	namespace dynamic_view
+	{
+	
+		template <typename Prim, usize ND>
+		struct base
+		{
+			const array<usize, ND> dims;
+			
+			base(const array<usize, ND> &dims) : dims(dims) {}
+
+			template <usize N>
+			requires (N == ND)
+			base(const usize (&dims)[N]) : dims(dims) {}
+
+			template <typename ... Args>
+			requires (sizeof...(Args) == ND && (... && std::is_integral_v<Args>))
+			base(Args ... args) : base({ usize(args)... }) {}
+		};
+
+	}
 
 }

@@ -1,6 +1,9 @@
 
 #include <iostream>
 
+#include "waffle/arithmetics.hpp"
+using namespace waffle::literals;
+
 #include "waffle/array.hpp"
 
 #include "waffle/derived_vector.hpp"
@@ -11,13 +14,21 @@
 
 int main(void)
 {
+
 	{
 		waffle::ndarray<float, 13, 2> A(5.f);
 		waffle::ndarray<float, 13> Ainit(5.f);
 		std::cout << waffle::sum(A, Ainit) << std::endl;
 
-		waffle::ndarray<waffle::scalar<float>, 13, 2> B(waffle::scalar<float>(10.f));
-		std::cout << waffle::sum(B, waffle::scalar<float>(5.f)) << std::endl;
+		waffle::ndarray<float, 13> B(10.f);
+		float b = 10.f;
+
+		std::cout << std::boolalpha << (B == b) << std::endl;
+
+		auto C = waffle::sum(B, 5.f);
+		std::cout << C << std::endl;
+		
+		std::cout << std::endl;
 	}
 
 	{
@@ -51,7 +62,16 @@ int main(void)
 		std::cout << "d' = " << d.grad() << std::endl;
 		std::cout << std::endl;
 	}
-	
+
+	{
+		waffle::array<float, 2> A{ 1,2 };
+		waffle::array<float, 2> B = { 3,4 };
+		waffle::array<float, 2> C({ 5,6 });
+		std::cout << A << std::endl
+			<< B << std::endl
+			<< C << std::endl;
+	}
+
 }
 
 

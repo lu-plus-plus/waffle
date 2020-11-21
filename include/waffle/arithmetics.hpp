@@ -10,6 +10,12 @@ namespace waffle
 
 	using byte = std::uint8_t;
 
+	namespace literals
+	{
+		constexpr isize operator "" _is(unsigned long long int i) { return i; }
+		constexpr usize operator "" _us(unsigned long long int i) { return i; }
+	}
+
 
 
 	template <typename T>
